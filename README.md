@@ -43,7 +43,10 @@ sliamb/paopaodns
 ```
 ***如果你的网络端口没有冲突，也可以考虑使用docker host网络模式以获得最佳性能。***   
 *如条件允许建议使用**docker compose**部署*    
-*如果你的网络环境访问Dokcer镜像有困难，可以尝试使用[docker镜像加速](https://www.bing.com/search?q=docker%E9%95%9C%E5%83%8F%E4%BB%A3%E7%90%86)。*   
+如果你的网络环境访问Docker Hub镜像有困难，***可以尝试使用public.ecr.aws镜像:***    
+- 示例： `docker pull public.ecr.aws/sliamb/paopaodns`  
+- 示例： `docker run -d public.ecr.aws/sliamb/paopaodns`  
+
 
 验证你的递归DNS正常运行(假设你的容器IP是192.168.1.8)，可以执行以下命令：   
 ```cmd
@@ -174,8 +177,8 @@ www.qq.com@@@qq.03k.org
 |-|-|
 53|提供DNS服务的端口，在CNAUTO=no时数据直接来自unbound，CNAUTO=yes时数据来自mosdns
 5301|在CNAUTO=yes时，递归unbound的端口，可用于dig调试
-5302|在CNAUTO=yes时并设置了SOCKS5时，走SOCKS5的dnscrypt服务端口，可用于dig调试
-5303|在CNAUTO=yes时，原生dnscrypt服务端口，可用于dig调试
+5302|在CNAUTO=yes时，原生dnscrypt服务端口，可用于dig调试
+5303|在CNAUTO=yes时并设置了SOCKS5时，走SOCKS5的dnscrypt服务端口，可用于dig调试
 5304|在CNAUTO=yes时，dnscrypt的底层unbound实例缓存，可用于dig调试或者fakeip网关的上游  
 7889|HTTP_FILE=yes时，http静态文件服务器端口
 
