@@ -43,7 +43,10 @@ sliamb/paopaodns
 ```
 ***如果你的网络端口没有冲突，也可以考虑使用docker host网络模式以获得最佳性能。***   
 *如条件允许建议使用**docker compose**部署*    
-*如果你的网络环境访问Dokcer镜像有困难，可以尝试使用[docker镜像加速](https://www.bing.com/search?q=docker%E9%95%9C%E5%83%8F%E4%BB%A3%E7%90%86)。*   
+如果你的网络环境访问Docker Hub镜像有困难，***可以尝试使用public.ecr.aws镜像:***    
+- 示例： `docker pull public.ecr.aws/sliamb/paopaodns`  
+- 示例： `docker run -d public.ecr.aws/sliamb/paopaodns`  
+
 
 验证你的递归DNS正常运行(假设你的容器IP是192.168.1.8)，可以执行以下命令：   
 ```cmd
@@ -100,7 +103,7 @@ CUSTOM_FORWARD|空，可选功能|`IP:PORT`,如`10.10.10.3:53`|
 CUSTOM_FORWARD_TTL|`0`|`1-604800`|
 AUTO_FORWARD|`no`|`no`,`yes`|
 AUTO_FORWARD_CHECK|`yes`|`no`,`yes`|
-USE_MARK_DATA|`no`|`no`,`yes`|
+USE_MARK_DATA|`yes`|`no`,`yes`|
 RULES_TTL|`0`|`1-604800`|
 CN_TRACKER|`yes`|`no`,`yes`|
 USE_HOSTS|`no`|`no`,`yes`|
@@ -125,9 +128,9 @@ QUERY_TIME|`2000ms`|`time.Duration`|
 - CUSTOM_FORWARD_TTL：该项设置的值大于0的时候生效，设定CUSTOM_FORWARD的ttl的最小值。  
 - AUTO_FORWARD：仅在CNAUTO=yes时生效，配合`CUSTOM_FORWARD`功能使用，默认值为no，当设置为yes的时候，解析非CN大陆IP的域名将会直接转发到`CUSTOM_FORWARD`。       
 - AUTO_FORWARD_CHECK：在`AUTO_FORWARD=yes`时，转发前是否检查域名是否有效，避免产生无效查询。默认值为yes，设置为no则不检查。       
-- USE_MARK_DATA：该项默认值为no，当设置为yes的时候，将会自动更新下载预先标记处理的全球百万域名库，在判断大陆分流的时候优先使用该数据，该功能仅标记数据，后续如何处理取决你的设置（比如默认分流或者自动转发）。域名数据库来源于`paopao-pref`项目定期更新。该功能：  
+- USE_MARK_DATA：该项默认值为yes，当设置为yes的时候，将会自动更新下载预先标记处理的全球百万域名库，在判断大陆分流的时候优先使用该数据，该功能仅标记数据，后续如何处理取决你的设置（比如默认分流或者自动转发）。域名数据库来源于`paopao-pref`项目定期更新。该功能：  
   - 优点：可以优化DNS泄漏问题、提供更快速精准高效的分流
-  - 缺点：会占用更多内存，增加容器启动时间
+  - 缺点：会占用更多内存
 - RULES_TTL：该项设置的值大于0的时候生效，将`/data/force_ttl_rules.txt`里面指定的域名转发到指定的DNS服务器，并修改其TTL值为`RULES_TTL`。该功能仅对A记录和AAAA记录生效，其他记录请参考*进阶自定义示例*一节。该功能可以适用于多种场景，比如想实现在异地的网络访问回家的DDNS域名的结果更实时一点，你可以把`RULES_TTL`设置为一个较低的值，然后把你的DDNS域名指定转发到对应的权威DNS服务器（也就是whois信息的NS服务器对应的IP地址，注意不要CNAME嵌套）即可。`force_ttl_rules`的规则格式为域名@服务器:端口，以下都是合法的格式：
 ```yaml
 # whois info 03k.org:
@@ -155,11 +158,17 @@ www.qq.com@@qq.03k.org
 
 # 注意，使用@@为子域名匹配，上述示例会匹配*.www.qq.com和www.qq.com
 
-
 # 如果需要精确匹配，可以使用@@@：
 www.qq.com@@@1.2.3.4
 www.qq.com@@@2404:6800:4008:c06::99
 www.qq.com@@@qq.03k.org
+
+# 使用通配符匹配（同样适用于CNAME）：
+# 注意，这不是正则匹配，参考[更新日志](https://github.com/kkkgo/PaoPaoDNS/discussions/187)
+k8s.*.qq.com@@1.2.3.4 # k8s.xxx.qq.com和k8s.aaa.xxx.xxx.com都会被匹配
+dl[0-8].qq.com@@1.2.3.4 # dl8.qq.com会被匹配，dl9.qq.com不会被匹配，dl88.qq.com不会被匹配
+ftp[a-c].qq.com@@1.2.3.4 # ftpc.qq.com会被匹配，ftpd.qq.com不会被匹配
+dl[0-8][2-4][x-z].qq.com@@1.2.3.4 # dl84z.qq.com会被匹配，dl11x.qq.com不会被匹配，dl23t.qq.com不会被匹配
 ```
 
 - CN_TRACKER：仅在CNAUTO=yes时生效，默认值为yes，当设置为yes的时候，强制`trackerslist.txt`里面tracker的域名走dnscrypt解析。更新数据的时候会自动下载最新的trakcerlist。该功能在一些场景比较有用，比如`AUTO_FORWARD`配合fakeip的时候可以避免使用fakeip连接tracker。       
@@ -174,8 +183,8 @@ www.qq.com@@@qq.03k.org
 |-|-|
 53|提供DNS服务的端口，在CNAUTO=no时数据直接来自unbound，CNAUTO=yes时数据来自mosdns
 5301|在CNAUTO=yes时，递归unbound的端口，可用于dig调试
-5302|在CNAUTO=yes时并设置了SOCKS5时，走SOCKS5的dnscrypt服务端口，可用于dig调试
-5303|在CNAUTO=yes时，原生dnscrypt服务端口，可用于dig调试
+5302|在CNAUTO=yes时，原生dnscrypt服务端口，可用于dig调试
+5303|在CNAUTO=yes时并设置了SOCKS5时，走SOCKS5的dnscrypt服务端口，可用于dig调试
 5304|在CNAUTO=yes时，dnscrypt的底层unbound实例缓存，可用于dig调试或者fakeip网关的上游  
 7889|HTTP_FILE=yes时，http静态文件服务器端口
 
@@ -204,6 +213,7 @@ www.qq.com@@@qq.03k.org
 - 文本匹配优先级`(custom_mod功能seq: top)`>`force_forward_list` > `force_dnscrypt_list` > `force_recurse_list` > `force_ttl_rules`>`(custom_mod功能seq: list)`>`其他自动分流逻辑`。
 - **注意事项**：由于跨平台系统差异，不建议使用Windows自带记事本编辑。如果list出现了问题无法读取或者无法生效，可以直接删除list文件，重启容器会自动重建默认的list。如果你想解析的域名位于境外，并且没有境内CDN，而你又想获取原始记录（与`force_forward_list.txt`或者使用`AUTO_FORWARD`功能获取到的解析记录区分开），那么你应该把域名加进`force_dnscrypt_list.txt`而不是`force_recurse_list.txt`，因为基于个人网络环境差异，递归服务器位于境外的域名存在递归失败的可能。*`force_recurse_list.txt`的应用场景一般应仅限于特殊域名递归调试，大部分场景都不适用于`force_recurse_list.txt`。* 此外，你可以根据`文本匹配优先级`灵活设置同一个域名子域名走不同的list。（[参考](https://github.com/kkkgo/PaoPaoDNS/discussions/122) ）。         
 - `trackerslist.txt`：bt trakcer列表文件，开启`CN_TRACKER`功能会出现，会增量自动更新，[更新数据来源](https://github.com/kkkgo/all-tracker-list) ，你也可以添加自己的trakcer到这个文件(或者向[该项目](https://github.com/kkkgo/all-tracker-list)提交)，更新的时候会自动合并。修改将实时重载生效。容器版本更新不会覆盖该文件。   
+- `custom_cn_mark.txt`: 在`USE_MARK_DATA`功能设置为`yes`的情况下，可以在`/data/custom_cn_mark.txt`中额外定义标记为`CN`的域名。填写格式与其他 `force_*_list.txt`一致。参考 https://github.com/kkkgo/PaoPaoDNS/discussions/122 。有限的使用场景：当域名被`USE_MARK_DATA`或者被IP库认定为非`CN`域名但你希望把他当成`CN`域名处理的时候。 参考[更新日志](https://github.com/kkkgo/PaoPaoDNS/discussions/187)。
 - `mosdns.yaml`：mosdns的配置模板文件，修改它将会覆盖mosdns运行参数。除了调试用途，一般强烈建议不修改它。容器版本更新将会覆盖该文件。   
 - `custom_env.ini`可以自定义环境变量，会覆盖在容器在启动时的环境变量。在容器启动后修改该文件将会导致MosDNS重载，但在容器启动后修改的环境变量不会影响已经启动的其他组件。配置的格式为`key="value"`（注意英文双引号），错误格式的环境变量将会被忽略加载。容器版本更新不会覆盖该文件。  
 - `custom_mod.yaml`可以自定义一些高级功能，参见下面的`custom_mod.yaml`文件说明。错误的配置可能导致服务运行异常。需要重启容器应用配置。容器版本更新不会覆盖该文件。   
@@ -238,6 +248,12 @@ Zones:
    ttl: 3
    seq: list
    socks5: yes
+# zone可以一次性写入多个域名，也可以使用list的规则写法，也可以直接引用外部文件（必须以反斜杠`/`的绝对路径开头），以空格隔开，例如：
+ - zone: a.com domain:b.com full:c.com regexp:dl[0-9]+\.qq\.com$ keyword:google /data/mylist.txt
+   dns: udp://10.10.10.3:53,udp://10.10.10.4:53
+   ttl: 0
+   seq: top
+   socks5: no
 # Swaps可以指定某个IP/CIDR段的解析结果替换为指定变量的结果。
 # 以最终解析结果为准匹配。与Zones格式类似可以配置多组。
 Swaps:
@@ -245,14 +261,24 @@ Swaps:
    cidr_file: "/data/test_cidr.txt"
 # env_key：配置指定变量的解析结果。可以配合custom_env.ini使用。
 # cidr_file: 配置指定IP/CIDR段的文本文件。格式为每行一个IP/CIDR段。
+# Swaps的env_key可以对应多个cidr_file，一个cidr_file仅可以匹配一个env_key，详情参考[更新日志](https://github.com/kkkgo/PaoPaoDNS/discussions/187)
 # 注意：如果env_key或者cidr_file配置出错，容器日志会报错并忽略替换。
+# 注：`Swaps`应用场景参考：[替换指定IP段的解析结果为指定IP](https://github.com/kkkgo/PaoPaoDNS/discussions/57 )   
+
+Hosts:
+ - env_key: test_ip
+   zone: a.com domain:b.com full:c.com regexp:dl[0-9]+\.qq\.com$ keyword:google /data/mylist.txt
+# Hosts模块，可以自定义域名的解析直接映射为指定变量的结果。域名写法与Zones模块一样，支持引入外部文件。  
+# Hosts模块将位于最高匹配优先级。
 ```
-注：`Swaps`应用场景参考：[替换指定IP段的解析结果为指定IP](https://github.com/kkkgo/PaoPaoDNS/discussions/57 )   
+Tips :
+-  `env_key`配合`custom_env.ini`使用可以实现变量改变的时候重新加载。
+- `custom_mod`功能引入的外部文件仅在容器启动的时候加载，如果不存在会跳过规则。`custom_mod`引入的外部文件不会被额外监测，发生变化的时候不会重新加载。如果需要重新加载所有外部文件，可以使用`reload.sh`命令，示例：`docker exec paopaodns reload.sh`
+
 ### 进阶自定义示例
 
 1. 在企业内可能需要的一个功能，就是需要和AD域整合，转发指定域名到AD域服务器的方法：
 打开`/data/custom_mod.yaml`编辑：
-```yaml
 ```yaml
 #Active Directory Forward Example
 # 在这个示例中，你公司的AD域名为company.local，有几个AD域DNS服务器。
@@ -261,7 +287,8 @@ Zones:
    dns: 10.111.222.11,10.111.222.12,10.111.222.13
 ```
 
-2. 添加微软KMS服务器SRV记录
+2. 添加除了A/AAAA记录以外类型的本地记录解析，可以通过编辑`unbound_custom.conf`实现，具体语法可以参考unbound官方文档，例如添加微软KMS服务器SRV记录
+打开`/data/unbound_custom.conf`编辑：
 ```yaml
 #Example of setting up SRV records for KMS server VLMCS.
 #假设你的内网后缀是.lan，KMS服务器地址是192.168.1.2或者kms.ad.local
